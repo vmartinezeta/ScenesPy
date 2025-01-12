@@ -5,6 +5,7 @@ import os
 from Include.classes.Bacteria import Bacteria
 from Include.classes.Player import Player
 from Include.classes.Roca import Roca
+from Include.classes.Particle import Particle
 
 
 SPRITE_SCALING = 0.5
@@ -52,13 +53,21 @@ class GameView(arcade.View):
         self.gameOver = False
         self.allSpriteList = None
         self.bacteriaList = None
+        self.rocaList = None
         self.roca = None
-        self.score = 0
         self.player = None
+        self.fondoSound = None
 
     def setup(self):
         self.camera = arcade.Camera(self.window.width, self.window.height)
         self.gui_camera = arcade.Camera(self.window.width, self.window.height)
+
+        self.gameOverSound = arcade.load_sound(":resources:sounds/gameover2.wav")
+
+        
+        fondoSound = arcade.load_sound(":resources:sounds/fondo.mp3")
+        
+        self.fondoSound = arcade.play_sound(fondoSound)
 
         self.allSpriteList = arcade.SpriteList()
         self.bacteriaList = arcade.SpriteList()
@@ -71,7 +80,7 @@ class GameView(arcade.View):
 
         self.allSpriteList.append(self.player)
 
-        self.crearBacterias(50)
+        self.crearBacterias(30)
 
         self.window.set_mouse_visible(False)
 
@@ -107,10 +116,21 @@ class GameView(arcade.View):
         self.player.center_y = y
 
     def on_mouse_press(self, x, y, _button, _modifiers):
-        self.roca = Roca(":resources:images/items/coinSilver.png", SPRITE_SCALING / 3)
+        player = self.player 
+        self.roca = Roca(":resources:images/items/coinSilver.png", SPRITE_SCALING / 3, player.dx, player.dy)
         self.roca.center_x = x
         self.roca.center_y = y
         self.allSpriteList.append(self.roca)
+
+    def on_key_press(self, symbol, modifiers):
+        if symbol == arcade.key.DOWN:
+            self.player.bottom()
+        elif symbol == arcade.key.UP:
+            self.player.top()
+        elif symbol == arcade.key.LEFT:
+            self.player.left()
+        elif symbol == arcade.key.RIGHT:
+            self.player.right()
 
     def on_update(self, delta_time):
         self.allSpriteList.update()
@@ -131,7 +151,7 @@ class GameView(arcade.View):
                 self.crearBacterias(5)
                 hembra.remove_from_sprite_lists()
 
-        hitList = arcade.check_for_collision_with_list(self.player, self.bacteriaList)
+        hitList = self.player.collides_with_list(self.bacteriaList)
         for bacteria in hitList:
             if (self.player.tieneVida()):
                 self.player.quitarVida()
@@ -151,7 +171,9 @@ class GameView(arcade.View):
             descripcion = "Fallaste - Click para reiniciar"
             if self.player.tieneVida() and len(self.bacteriaList)==0:
                 descripcion = "Ganaste - Click para reiniciar"
+            arcade.stop_sound(self.fondoSound)
             game_over = GameOverView(descripcion)
+            arcade.play_sound(self.gameOverSound)
             self.window.show_view(game_over)
 
 
