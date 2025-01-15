@@ -2,6 +2,7 @@ import arcade
 import random
 import math
 import os
+import pyglet
 from Include.classes.Bacteria import Bacteria
 from Include.classes.Player import Player
 from Include.classes.Roca import Roca
@@ -32,6 +33,7 @@ class GameOverView(arcade.View):
         gameView.setup()
         self.window.show_view(gameView)
 
+
 class GameView(arcade.View):
     def __init__(self):
         super().__init__()
@@ -45,6 +47,8 @@ class GameView(arcade.View):
         self.roca = None
         self.player = None
         self.fondoSound = None
+        self.emitter = None
+        self.emitter_timeout = 0
 
     def setup(self):
         self.camera = arcade.Camera(self.window.width, self.window.height)
@@ -90,6 +94,9 @@ class GameView(arcade.View):
 
     def on_draw(self):
         self.clear()
+        if self.emitter:
+            self.emitter.draw()
+
         self.allSpriteList.draw()
         output = "vida: " + str(self.player.vida)
         arcade.draw_text(output, 10, 20, arcade.color.WHITE, 14)
@@ -103,11 +110,7 @@ class GameView(arcade.View):
 
     def on_mouse_press(self, x, y, _button, _modifiers):
         if self.pause or self.gameOver: return
-        player = self.player 
-        self.roca = Roca(GameConfig.SPRITE_ROCA, GameConfig.SPRITE_SCALING / 3, player.dx, player.dy)
-        self.roca.center_x = x
-        self.roca.center_y = y
-        self.allSpriteList.append(self.roca)
+        self.emitter = self.emitterVeneno((x,y))
 
     def on_key_press(self, symbol, modifiers):
         if symbol == arcade.key.S:
@@ -121,9 +124,29 @@ class GameView(arcade.View):
         elif symbol == arcade.key.SPACE:
             self.pause = not self.pause
 
+    def emitterVeneno(self, origen):
+        return arcade.Emitter(
+            center_xy=origen,
+            emit_controller=arcade.EmitterIntervalWithTime(GameConfig.DEFAULT_EMIT_INTERVAL, GameConfig.DEFAULT_EMIT_DURATION),
+            particle_factory=lambda emitter: arcade.LifetimeParticle(
+                filename_or_texture=GameConfig.TEXTURE,
+                change_xy=arcade.rand_in_circle((0.0, 0.0), GameConfig.PARTICLE_SPEED_FAST),
+                lifetime=1.0,
+                scale=GameConfig.DEFAULT_SCALE,
+                alpha=GameConfig.DEFAULT_ALPHA
+            )
+        )
+
     def on_update(self, delta_time):
         if self.pause or self.gameOver: return
         self.allSpriteList.update()
+
+        if self.emitter:
+            self.emitter_timeout += 1
+            self.emitter.update()
+
+            if self.emitter.can_reap() or self.emitter_timeout > GameConfig.EMITTER_TIMEOUT:
+                self.emitter = None
 
         machos = []
         for bacteria in self.bacteriaList:
@@ -147,21 +170,20 @@ class GameView(arcade.View):
                 self.player.quitarVida()
                 bacteria.remove_from_sprite_lists()
 
-        if isinstance(self.roca, Roca):
+        if self.roca:
             hitBacteriaList = arcade.check_for_collision_with_list(self.roca, self.bacteriaList)
             for bacteria in hitBacteriaList:
                 bacteria.remove_from_sprite_lists()
         
-        if isinstance(self.roca, Roca) and self.roca.estaFuera:
+        if self.roca and self.roca.estaFuera:
             self.roca = None
 
         if not self.gameOver and (not self.player.tieneVida() or len(self.bacteriaList)==0 ):
             self.gameOver = True
             self.window.set_mouse_visible(True)
-            arcade.schedule(self.finJuego, 2)
+            self.finJuego()
 
-    def finJuego(self, delta_time):
-        arcade.unschedule(self.finJuego)
+    def finJuego(self):
         descripcion = "Fallaste - Click para reiniciar"
         if self.player.tieneVida() and len(self.bacteriaList)==0:
             descripcion = "Ganaste - Click para reiniciar"
