@@ -44,7 +44,6 @@ class GameView(arcade.View):
         self.gameOver = False
         self.allSpriteList = None
         self.bacteriaList = None
-        self.roca = None
         self.player = None
         self.fondoSound = None
         self.emitter = None
@@ -110,6 +109,7 @@ class GameView(arcade.View):
 
     def on_mouse_press(self, x, y, _button, _modifiers):
         if self.pause or self.gameOver: return
+
         self.emitter = self.emitterVeneno((x,y))
 
     def on_key_press(self, symbol, modifiers):
@@ -144,9 +144,16 @@ class GameView(arcade.View):
         if self.emitter:
             self.emitter_timeout += 1
             self.emitter.update()
+            
+            for bacteria in self.bacteriaList:
+                hitParticleList = bacteria.collides_with_list(self.emitter._particles)
+                for _ in hitParticleList:
+                    bacteria.remove_from_sprite_lists()
+
 
             if self.emitter.can_reap() or self.emitter_timeout > GameConfig.EMITTER_TIMEOUT:
                 self.emitter = None
+                self.emitter_timeout = 0
 
         machos = []
         for bacteria in self.bacteriaList:
@@ -161,22 +168,15 @@ class GameView(arcade.View):
         for macho in machos:
             hitHembraList = arcade.check_for_collision_with_list(macho, hembras)
             for hembra in hitHembraList:
-                self.crearBacterias(5)
                 hembra.remove_from_sprite_lists()
+                if len(self.bacteriaList) > 100:return
+                self.crearBacterias(5)
 
         hitList = self.player.collides_with_list(self.bacteriaList)
         for bacteria in hitList:
             if (self.player.tieneVida()):
                 self.player.quitarVida()
                 bacteria.remove_from_sprite_lists()
-
-        if self.roca:
-            hitBacteriaList = arcade.check_for_collision_with_list(self.roca, self.bacteriaList)
-            for bacteria in hitBacteriaList:
-                bacteria.remove_from_sprite_lists()
-        
-        if self.roca and self.roca.estaFuera:
-            self.roca = None
 
         if not self.gameOver and (not self.player.tieneVida() or len(self.bacteriaList)==0 ):
             self.gameOver = True
