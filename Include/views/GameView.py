@@ -5,8 +5,8 @@ import os
 import pyglet
 from Include.classes.Bacteria import Bacteria
 from Include.classes.Player import Player
-from Include.classes.Roca import Roca
 from Include.classes.GameConfig import GameConfig
+from Include.classes.Tanque import Tanque
 
 class GameOverView(arcade.View):
     def __init__(self, descripcion):
@@ -42,32 +42,27 @@ class GameView(arcade.View):
         os.chdir(file_path)        
         self.pause = False
         self.gameOver = False
-        self.allSpriteList = None
         self.bacteriaList = None
         self.player = None
         self.fondoSound = None
         self.emitter = None
         self.emitter_timeout = 0
+        self.tanque = None
 
     def setup(self):
         self.camera = arcade.Camera(self.window.width, self.window.height)
         self.gui_camera = arcade.Camera(self.window.width, self.window.height)
 
         self.gameOverSound = arcade.load_sound(GameConfig.SOUND_GAMEOVER)
-        
-        fondoSound = arcade.load_sound(GameConfig.SOUND_FONDO)
-        
+        fondoSound = arcade.load_sound(GameConfig.SOUND_FONDO)    
         self.fondoSound = arcade.play_sound(fondoSound)
 
-        self.allSpriteList = arcade.SpriteList()
         self.bacteriaList = arcade.SpriteList()
 
-        self.score = 0
         self.player = Player(GameConfig.SPRITE_PLAYER, GameConfig.SPRITE_SCALING)
         self.player.center_x = 50
         self.player.center_y = 70
-
-        self.allSpriteList.append(self.player)
+        self.player.iniciarTemporizador()
 
         self.crearBacterias(30)
 
@@ -88,15 +83,20 @@ class GameView(arcade.View):
             bacteria.circle_radius = random.randrange(100, 200)
             bacteria.circle_angle = random.random() * 2 * math.pi
 
-            self.allSpriteList.append(bacteria)
             self.bacteriaList.append(bacteria)
 
     def on_draw(self):
         self.clear()
-        if self.emitter:
-            self.emitter.draw()
 
-        self.allSpriteList.draw()
+        if self.player.tanque:
+            self.player.tanque.draw()
+
+        if self.player.emitter:
+            self.player.emitter.draw()
+
+        self.player.draw()
+        self.bacteriaList.draw()
+
         output = "vida: " + str(self.player.vida)
         arcade.draw_text(output, 10, 20, arcade.color.WHITE, 14)
         if self.pause :
@@ -109,8 +109,7 @@ class GameView(arcade.View):
 
     def on_mouse_press(self, x, y, _button, _modifiers):
         if self.pause or self.gameOver: return
-
-        self.emitter = self.emitterVeneno((x,y))
+        self.player.vaciarTanque()
 
     def on_key_press(self, symbol, modifiers):
         if symbol == arcade.key.S:
@@ -124,41 +123,20 @@ class GameView(arcade.View):
         elif symbol == arcade.key.SPACE:
             self.pause = not self.pause
 
-    def emitterVeneno(self, origen):
-        return arcade.Emitter(
-            center_xy=origen,
-            emit_controller=arcade.EmitterIntervalWithTime(GameConfig.DEFAULT_EMIT_INTERVAL, GameConfig.DEFAULT_EMIT_DURATION),
-            particle_factory=lambda emitter: arcade.LifetimeParticle(
-                filename_or_texture=GameConfig.TEXTURE,
-                change_xy=arcade.rand_in_circle((0.0, 0.0), GameConfig.PARTICLE_SPEED_FAST),
-                lifetime=1.0,
-                scale=GameConfig.DEFAULT_SCALE,
-                alpha=GameConfig.DEFAULT_ALPHA
-            )
-        )
-
     def on_update(self, delta_time):
         if self.pause or self.gameOver: return
-        self.allSpriteList.update()
+        self.player.update()
+        self.bacteriaList.update()
 
-        if self.emitter:
-            self.emitter_timeout += 1
-            self.emitter.update()
-            
+
+        if self.player.emitter:
+            self.player.emitter.update()
             for bacteria in self.bacteriaList:
-                hitParticleList = bacteria.collides_with_list(self.emitter._particles)
+                hitParticleList = bacteria.collides_with_list(self.player.emitter._particles)
                 for _ in hitParticleList:
                     bacteria.remove_from_sprite_lists()
 
-
-            if self.emitter.can_reap() or self.emitter_timeout > GameConfig.EMITTER_TIMEOUT:
-                self.emitter = None
-                self.emitter_timeout = 0
-
-        machos = []
-        for bacteria in self.bacteriaList:
-            if not bacteria.hembra:
-                machos.append(bacteria)
+        machos = filter(lambda bacteria:not bacteria.hembra, self.bacteriaList)
 
         hembras = arcade.SpriteList()
         for bacteria in self.bacteriaList:
@@ -166,17 +144,17 @@ class GameView(arcade.View):
                 hembras.append(bacteria)
 
         for macho in machos:
-            hitHembraList = arcade.check_for_collision_with_list(macho, hembras)
+            hitHembraList = macho.collides_with_list(hembras)
             for hembra in hitHembraList:
+                macho.remove_from_sprite_lists()
                 hembra.remove_from_sprite_lists()
                 if len(self.bacteriaList) > 100:return
                 self.crearBacterias(5)
 
         hitList = self.player.collides_with_list(self.bacteriaList)
         for bacteria in hitList:
-            if (self.player.tieneVida()):
-                self.player.quitarVida()
-                bacteria.remove_from_sprite_lists()
+            self.player.morir()
+            bacteria.remove_from_sprite_lists()
 
         if not self.gameOver and (not self.player.tieneVida() or len(self.bacteriaList)==0 ):
             self.gameOver = True
